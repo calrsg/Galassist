@@ -1,0 +1,7 @@
+{
+    "discord": {
+        "bot_token": "",
+        "dev_bot_token": "",
+        "command_prefixes": ["!"]
+    }
+}
