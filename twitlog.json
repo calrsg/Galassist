@@ -3,5 +3,6 @@
     },
     "users": {
     },
-    "links_fixed": 0
+    "links_fixed": 0,
+    "ignored": {}
 }
