@@ -1,10 +1,8 @@
 import asyncio
-import json
-
 import discord
 from discord.ext import commands
-import time
 import re
+from util.twitlog import TwitLog
 
 class TwitFix(commands.Cog):
     def __init__(self, bot):
@@ -29,9 +27,7 @@ class TwitFix(commands.Cog):
                 parent_ref = await message.channel.fetch_message(parent.reference.message_id)
                 if parent.reference and parent_ref:
                     parent_author = parent_ref.author
-                    if parent_author == message.author:
-                        None
-                    else:
+                    if parent_author != message.author:
                         if await self.log.get_ignored(parent_author.id) is not True:
                             await parent_author.send(f"{message.author.display_name} replied to a fixed Tweet you posted in {message.guild.name}: "
                                                      f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}\n"
@@ -50,12 +46,12 @@ class TwitFix(commands.Cog):
         for r in replace:
             if r in message.content:
                 new_content = ""
-                url_regex = r"(https?:\/\/)(www\.)?(twitter\.com|x\.com)(\/[-a-zA-Z0-9()@:%_\+.~#?&//=]*)?"
+                url_regex = r"(https?:\/\/)(www\.)?(twitter\.com|x\.com)(\/[-a-zA-Z0-9()@:%_\+.~#?&=]*)*(\/status\/[0-9]*\/)(photo\/[0-9])"
                 urls = re.findall(url_regex, message.content)
                 log_count = 0
                 for url in urls:
                     spoiler = await spoiler_check(message.content)
-                    url = url[0] + url[1] + url[2] + url[3]
+                    url = url[0] + url[1] + url[2] + url[3] + url[4]
                     for r in replace:
                         if r in url and "fxtwitter.com" not in url and "vxtwitter.com" not in url:
                             url = url.replace(r, "fxtwitter.com")
@@ -124,86 +120,6 @@ async def spoiler_check(message):
     if len(split) >= 2:
         return True
     return False
-
-class TwitLog:
-    def __init__(self):
-        self.filepath = "twitlog.json"
-        self.lock = asyncio.Lock()
-        self.data = {}
-
-    async def load(self):
-        async with self.lock:
-            with open(self.filepath, "r") as f:
-                self.data = json.load(f)
-
-    async def dump(self):
-        async with self.lock:
-            with open(self.filepath, "w") as f:
-                json.dump(self.data, f, indent=4)
-
-    async def add_to_server(self, serverID, entryNum):
-        serverID = str(serverID)
-        async with self.lock:
-            if serverID not in self.data["servers"]:
-                self.data["servers"][serverID] = 0
-            self.data["servers"][serverID] += entryNum
-
-    async def add_to_user(self, userID, entryNum):
-        userID = str(userID)
-        async with self.lock:
-            if userID not in self.data["users"]:
-                self.data["users"][userID] = 0
-            self.data["users"][userID] += entryNum
-
-    async def add_total_fixed(self, entryNum):
-        async with self.lock:
-            self.data["links_fixed"] += entryNum
-
-    async def add_ignored(self, userID):
-        userID = str(userID)
-        async with self.lock:
-            if userID not in self.data["ignored"]:
-                self.data["ignored"][userID] = True
-
-    async def rem_ignored(self, userID):
-        userID = str(userID)
-        async with self.lock:
-            if userID in self.data["ignored"]:
-                self.data["ignored"].pop(userID, None)
-
-    async def get_stats(self):
-        async with self.lock:
-            sorted_servers = {k: v for k, v in sorted(self.data["servers"].items(), key=lambda item: item[1], reverse=True)}
-            sorted_users = {k: v for k, v in sorted(self.data["users"].items(), key=lambda item: item[1], reverse=True)}
-            total_fixed = self.data["links_fixed"]
-            return sorted_servers, sorted_users, total_fixed
-
-    async def get_server_stats(self, serverID):
-        serverID = str(serverID)
-        async with self.lock:
-            if serverID not in self.data["servers"]:
-                return 0
-            return self.data["servers"][serverID]
-
-    async def get_user_stats(self, userID):
-        userID = str(userID)
-        async with self.lock:
-            if userID not in self.data["users"]:
-                return 0
-            return self.data["users"][userID]
-
-    async def get_ignored(self, userID):
-        userID = str(userID)
-        async with self.lock:
-            if userID not in self.data["ignored"]:
-                return False
-            return True
-
-    async def update(self, serverID, userID, entryNum):
-        await self.add_to_server(serverID, entryNum)
-        await self.add_to_user(userID, entryNum)
-        await self.add_total_fixed(entryNum)
-
 
 async def setup(bot):
     tf = TwitFix(bot)
