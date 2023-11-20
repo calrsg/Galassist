@@ -62,9 +62,9 @@ class TwitFix(commands.Cog):
 
                 if len(urls) > 0:
                     await self.log.update(message.guild.id, message.author.id, log_count, )
-                    prefix = f"Fixing Twitter for {message.author.display_name}\n"
+                    prefix = f"Fixing Tweet for {message.author.display_name}\n"
                     if spoiler:
-                        prefix = f"Fixing Twitter for {message.author.display_name} with hidden content\n"
+                        prefix = f"Fixing Tweet for {message.author.display_name} with hidden content\n"
                     new_content = prefix + new_content
                     await message.reply(new_content, mention_author=False)
                     return
