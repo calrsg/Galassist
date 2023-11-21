@@ -46,7 +46,7 @@ class TwitFix(commands.Cog):
         for r in replace:
             if r in message.content:
                 new_content = ""
-                url_regex = r"(https?:\/\/)(www\.)?(twitter\.com|x\.com)(\/[-a-zA-Z0-9()@:%_\+.~#?&=]*)*(\/status\/[0-9]*\/)(photo\/[0-9])"
+                url_regex = r"(https?:\/\/)(www\.)?(twitter\.com|x\.com)(\/[-a-zA-Z0-9()@:%_\+.~#?&=]*)(\/status\/[-a-zA-Z0-9()@:%_\+.~#?&=]*)(\/photo\/[0-9]*)?"
                 urls = re.findall(url_regex, message.content)
                 log_count = 0
                 for url in urls:
