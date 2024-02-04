@@ -8,6 +8,10 @@ class TwitFix(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.status = True
+        self.replace = ["twitter.com", "x.com", "nitter.net"]
+        self.ignore = ["fxtwitter.com", "vxtwitter.com"]
+        self.emoji = "<:twitter_logo:1203668202324885554>"
+        self.id = "tfid"
         self.log = TwitLog()
         self.bot.loop.create_task(self.init_log())
 
@@ -21,57 +25,32 @@ class TwitFix(commands.Cog):
             return
 
         # Intuitive replies
-        if message.reference and message.reference.resolved:
-            parent = message.reference.resolved
-            if parent.author == self.bot.user:
-                parent_ref = await message.channel.fetch_message(parent.reference.message_id)
-                if parent.reference and parent_ref:
-                    parent_author = parent_ref.author
-                    if parent_author != message.author:
-                        if await self.log.get_ignored(parent_author.id) is not True:
-                            await parent_author.send(f"{message.author.display_name} replied to a fixed Tweet you posted in {message.guild.name}: "
-                                                     f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}\n"
-                                                     f"If you want to disable these reminders, use the command /tfremind.")
+        res = await self.is_intuitive_reply(message)
+        if not res:
+            pass
+        else:
+            await res.send(
+                f"{message.author.display_name} replied to your message that I fixed in {message.guild.name}: "
+                f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}\n"
+                f"If you want to disable these reminders, use the command /tfremind.")
 
-        # URL Replacements
-        replace = ["twitter.com", "x.com"]
-        ignore = ["fxtwitter.com", "vxtwitter.com"]
-
-        # Ignore if message contains pre-fixed URLs
-        for i in ignore:
-            if i in message.content:
+        if await self.find_tweet(message):
+            fixed, urls = await self.fix_message(message)
+            prefix, embed = await self.prepare_message(message, fixed, urls)
+            prefix = prefix + "\n*Trialing new format, give feedback on if the embed context is worth using two messages.*"
+            try:
+                await message.delete()
+            except discord.Forbidden:
+                prefix = ":prohibited: I don't have permission to delete the original message I am replying to, please give me the `Manage Messages` permission to avoid clutter.\n" + prefix
+            try:
+                first_msg = await message.channel.send(embed=embed, mention_author=False)
+                await first_msg.reply(content=prefix)
+            except discord.Forbidden:
                 return
-        # Check if URLs contain replacements before Regex searching
-        count = 0
-        for r in replace:
-            if r in message.content:
-                new_content = ""
-                url_regex = r"(https?:\/\/)(www\.)?(twitter\.com|x\.com)(\/[-a-zA-Z0-9()@:%_\+.~#?&=]*)(\/status\/[-a-zA-Z0-9()@:%_\+.~#?&=]*)(\/photo\/[0-9]*)?"
-                urls = re.findall(url_regex, message.content)
-                log_count = 0
-                for url in urls:
-                    spoiler = await spoiler_check(message.content)
-                    url = url[0] + url[1] + url[2] + url[3] + url[4]
-                    for r in replace:
-                        if r in url and "fxtwitter.com" not in url and "vxtwitter.com" not in url:
-                            url = url.replace(r, "fxtwitter.com")
-                            if spoiler:
-                                url = "||" + url + "||"
-                            new_content += f"{url}\n"
-                            log_count += 1
-
-                if len(urls) > 0:
-                    await self.log.update(message.guild.id, message.author.id, log_count, )
-                    prefix = f"Fixing Tweet for {message.author.display_name}\n"
-                    if spoiler:
-                        prefix = f"Fixing Tweet for {message.author.display_name} with hidden content\n"
-                    new_content = prefix + new_content
-                    await message.reply(new_content, mention_author=False)
-                    return
 
     @commands.is_owner()
-    @commands.hybrid_command(name="twitstatus", with_app_command=True, description="Toggle Twitter link fixer.")
-    async def twitstatus(self, ctx):
+    @commands.hybrid_command(name="tftoggle", with_app_command=True, description="Toggle Twitter link fixer.")
+    async def tftoggle(self, ctx):
         if self.status:
             self.status = False
             await ctx.send("Twitter link fixer disabled.")
@@ -115,6 +94,84 @@ class TwitFix(commands.Cog):
         else:
             await self.log.rem_ignored(ctx.author.id)
             await ctx.author.send("You will now receive reply reminders.")
+
+    async def is_intuitive_reply(self, message):
+        find_id = fr"({self.id}\$([\d]*)\$)"
+        if message.author.bot:
+            return False
+        # Check if the replied to message is context message
+        if message.reference and message.reference.resolved:
+            search = message.reference.resolved
+            text = search.content
+            if search.embeds:
+                if search.embeds[0].footer.text is not None:
+                    text += search.embeds[0].footer.text
+            if self.id in text:
+                reply_user = re.findall(find_id, text)
+                if len(reply_user) > 0:
+                    return await self.bot.fetch_user(int(reply_user[0][1]))
+            # Check if replied to message is in reply to context message
+            if search.reference:
+                search = await message.channel.fetch_message(search.reference.message_id)
+                text = search.content
+                if search.embeds:
+                    if search.embeds[0].footer.text is not None:
+                        text += search.embeds[0].footer.text
+                if self.id in text:
+                    reply_user = re.findall(find_id, text)
+                    if len(reply_user) > 0:
+                        return await self.bot.fetch_user(int(reply_user[0][1]))
+        return False
+    async def find_tweet(self, message):
+        # URL Replacements
+        # Ignore if message contains pre-fixed URLs
+        for i in self.ignore:
+            if i in message.content:
+                return
+        # Check if URLs contain replacements before Regex searching
+        count = 0
+        for r in self.replace:
+            if r in message.content:
+                return True
+        return False
+
+    async def fix_message(self, message):
+        new_content = message.content
+        url_regex = r"(https?:\/\/)(www\.)?(twitter\.com|x\.com|nitter\.net)(\/[-a-zA-Z0-9()@:%_\+.~#?&=]*)(\/status\/[-a-zA-Z0-9()@:%_\+.~#?&=]*)(\/photo\/[0-9]*)?"
+        urls = re.findall(url_regex, message.content)
+        new_urls = []
+        log_count = 0
+        for url in urls:
+            spoiler = await spoiler_check(message.content)
+            new_url = url[0] + url[1] + url[2] + url[3] + url[4]
+            url = ''.join(url)
+            for r in self.replace:
+                if r in new_url and "fxtwitter.com" not in url and "vxtwitter.com" not in url:
+                    new_url = new_url.replace(r, "fxtwitter.com")
+                    if spoiler:
+                        new_url = "||" + new_url + "||"
+                    log_count += 1
+                    new_content = new_content.replace(url, f"{self.emoji} **[{log_count}]({url})**")
+                    new_urls.append(new_url)
+
+        if len(urls) > 0:
+            await self.log.update(message.guild.id, message.author.id, log_count)
+            return new_content, new_urls
+        # This is disgusting but it cracks me up
+        return False, False
+
+    async def prepare_message(self, message, content, urls):
+        footer = f"{self.id}${message.author.id}$"
+        prefix = ":thread: Unfurling tweets...\n"
+        count = 0
+        for url in urls:
+            count += 1
+            prefix += f"{self.emoji} **{count}** - {url}\n"
+        embed = discord.Embed(title=message.author.display_name, description=content, color=0x1DA1F2, timestamp=message.created_at)
+        embed.set_footer(text=footer)
+        embed.set_thumbnail(url=message.author.avatar)
+        return prefix, embed
+
 async def spoiler_check(message):
     split = message.split("||")
     if len(split) >= 2:
