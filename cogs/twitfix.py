@@ -97,7 +97,7 @@ class TwitFix(commands.Cog):
 
     async def is_intuitive_reply(self, message):
         find_id = fr"({self.id}\$([\d]*)\$)"
-        if message.author.bot:
+        if not message.author.bot:
             return False
         # Check if the replied to message is context message
         if message.reference and message.reference.resolved:
@@ -109,7 +109,9 @@ class TwitFix(commands.Cog):
             if self.id in text:
                 reply_user = re.findall(find_id, text)
                 if len(reply_user) > 0:
-                    return await self.bot.fetch_user(int(reply_user[0][1]))
+                    user = await self.bot.fetch_user(int(reply_user[0][1]))
+                    if not self.log.get_ignored(user.id):
+                        return user
             # Check if replied to message is in reply to context message
             if search.reference:
                 search = await message.channel.fetch_message(search.reference.message_id)
@@ -120,7 +122,9 @@ class TwitFix(commands.Cog):
                 if self.id in text:
                     reply_user = re.findall(find_id, text)
                     if len(reply_user) > 0:
-                        return await self.bot.fetch_user(int(reply_user[0][1]))
+                        user = await self.bot.fetch_user(int(reply_user[0][1]))
+                        if not self.log.get_ignored(user.id):
+                            return user
         return False
     async def find_tweet(self, message):
         # URL Replacements
