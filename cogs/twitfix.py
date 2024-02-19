@@ -8,6 +8,7 @@ class TwitFix(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.status = True
+        self.url = "fxtwitter.com"
         self.replace = ["twitter.com", "x.com", "nitter.net"]
         self.ignore = ["fxtwitter.com", "vxtwitter.com"]
         self.emoji = "<:twitter_logo:1203668202324885554>"
@@ -160,10 +161,10 @@ class TwitFix(commands.Cog):
         return False
 
     async def fix_message(self, message):
+        regex = r"(https?:\/\/)((?:www.)?twitter\.com|x\.com|nitter\.net)(\/[-a-zA-Z0-9()@:%_\+.~#?&=]*)(\/status\/[-a-zA-Z0-9()@:%_\+.~#?&=]*)(\/photo\/[0-9]*)?"
         if self.compact:
             new_content = message.content
-            url_regex = r"(https?:\/\/)(www\.)?(twitter\.com|x\.com|nitter\.net)(\/[-a-zA-Z0-9()@:%_\+.~#?&=]*)(\/status\/[-a-zA-Z0-9()@:%_\+.~#?&=]*)(\/photo\/[0-9]*)?"
-            urls = re.findall(url_regex, message.content)
+            urls = re.findall(regex, message.content)
             new_urls = []
             log_count = 0
             for url in urls:
@@ -173,6 +174,7 @@ class TwitFix(commands.Cog):
                 for r in self.replace:
                     if r in new_url and "fxtwitter.com" not in url and "vxtwitter.com" not in url:
                         new_url = new_url.replace(r, "fxtwitter.com")
+                        new_url = new_url.replace("www.", "")
                         if spoiler:
                             new_url = "||" + new_url + "||"
                         log_count += 1
@@ -186,8 +188,7 @@ class TwitFix(commands.Cog):
             return False, False
         else:
             new_content = message.content
-            url_regex = r"(https?:\/\/)(www\.)?(twitter\.com|x\.com|nitter\.net)(\/[-a-zA-Z0-9()@:%_\+.~#?&=]*)(\/status\/[-a-zA-Z0-9()@:%_\+.~#?&=]*)(\/photo\/[0-9]*)?"
-            urls = re.findall(url_regex, message.content)
+            urls = re.findall(regex, message.content)
             new_urls = []
             log_count = 0
             for url in urls:
