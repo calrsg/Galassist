@@ -9,6 +9,7 @@ class TwitFix(commands.Cog):
         self.bot = bot
         self.status = True
         self.url = "fxtwitter.com"
+        self.check = ["//twitter.com", "//x.com", "//nitter.net", "//www.twitter.com", "//www.x.com", "//www.nitter.net"]
         self.replace = ["twitter.com", "x.com", "nitter.net"]
         self.ignore = ["fxtwitter.com", "vxtwitter.com"]
         self.emoji = "<:twitter_logo:1203668202324885554>"
@@ -155,7 +156,7 @@ class TwitFix(commands.Cog):
                 return
         # Check if URLs contain replacements before Regex searching
         count = 0
-        for r in self.replace:
+        for r in self.check:
             if r in message.content:
                 return True
         return False
