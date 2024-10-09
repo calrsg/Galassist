@@ -1,4 +1,5 @@
 import asyncio
+
 import discord
 from discord.ext import commands
 import re
@@ -40,6 +41,7 @@ class TwitFix(commands.Cog):
             fixed, urls = await self.fix_message(message)
             content, embed = await self.prepare_message(message, fixed)
             try:
+                await asyncio.sleep(1)
                 await message.edit(suppress=True)
             except discord.Forbidden:
                 content = ":prohibited: I don't have permission to supress embeds in the message I am replying to, please give me the `Manage Messages` permission to avoid clutter.\n" + content
