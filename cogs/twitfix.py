@@ -39,16 +39,24 @@ class TwitFix(commands.Cog):
 
         if await self.find_tweet(message):
             fixed, urls = await self.fix_message(message)
-            content, embed = await self.prepare_message(message, fixed)
             try:
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.4)
                 await message.edit(suppress=True)
             except discord.Forbidden:
-                content = ":prohibited: I don't have permission to supress embeds in the message I am replying to, please give me the `Manage Messages` permission to avoid clutter.\n" + content
+                fixed = ":prohibited: I don't have permission to supress embeds in the message I am replying to, please give me the `Manage Messages` permission to avoid clutter.\n" + content
             try:
-                await message.reply(content, mention_author=False)
+                new_msg = await message.reply(fixed, mention_author=False)
+                await new_msg.add_reaction("❌")
             except discord.Forbidden:
                 return
+    @commands.Cog.listener()
+    async def on_reaction_add(self, reaction, user):
+        if user.bot:
+            return
+        # If replied to message is by the reaction user, and if the reaction emoji is for deleting
+        if reaction.message.reference.resolved.author.id == user.id and reaction.emoji == "❌":
+            await reaction.message.delete()
+            await user.send(f"You deleted a tweet I fixed in {reaction.message.guild.name}.")
 
     @commands.is_owner()
     @commands.hybrid_command(name="tftoggle", with_app_command=True, description="Toggle Twitter link fixer.")
@@ -98,40 +106,28 @@ class TwitFix(commands.Cog):
             await ctx.author.send("You will now receive reply reminders.")
 
     async def is_intuitive_reply(self, message):
-        find_id = fr"({self.id}\$([\d]*)\$)"
         if message.author.bot:
             return False
         # Check if the replied to message is context message
         if message.reference and message.reference.resolved:
-            if not message.reference.resolved.author.bot:
-                return False
             search = message.reference.resolved
-            text = search.content
-            if search.embeds:
-                if search.embeds[0].footer.text is not None:
-                    text += search.embeds[0].footer.text
-            if self.id in text:
-                reply_user = re.findall(find_id, text)
-                if len(reply_user) > 0:
-                    user = await self.bot.fetch_user(int(reply_user[0][1]))
-                    if not await self.log.get_ignored(user.id) and user.id != message.author.id:
-                        return user
-            # Check if replied to message is in reply to context message
-            if search.reference:
-                if not search.reference.resolved.author.bot:
-                    return False
-                search = await message.channel.fetch_message(search.reference.message_id)
-                text = search.content
-                if search.embeds:
-                    if search.embeds[0].footer.text is not None:
-                        text += search.embeds[0].footer.text
-                if self.id in text:
-                    reply_user = re.findall(find_id, text)
-                    if len(reply_user) > 0:
-                        user = await self.bot.fetch_user(int(reply_user[0][1]))
-                        if not await self.log.get_ignored(user.id) and user.id != message.author.id:
-                            return user
+            # If it's not a bot message, return False
+            if not search.author.bot:
+                return False
+            # If the replied to message is not replying to another message, return False
+            if not search.reference:
+                return False
+            # Check if the bot message fixed a twitter link
+            is_fixed = search.content.find("fxtwitter.com")
+            # Handle bot not being able to load resolved reference, force load message that we know exists
+            target = await search.channel.fetch_message(search.reference.message_id)
+            if target and is_fixed != -1:
+                user = await self.bot.fetch_user(int(target.author.id))
+                # Check if the user has disabled reminders, and if the user is not replying to their own fixed tweet
+                if not await self.log.get_ignored(user.id) and user.id != message.author.id:
+                    return user
         return False
+
     async def find_tweet(self, message):
         # URL Replacements
         # Ignore if message contains pre-fixed URLs
@@ -170,10 +166,6 @@ class TwitFix(commands.Cog):
             return new_content, new_urls
         # This is disgusting but it cracks me up
         return False, False
-
-    async def prepare_message(self, message, content):
-        new_message = f"> `{self.id}${message.author.id}$` {content}"
-        return new_message, False
 
 async def spoiler_check(message):
     split = message.split("||")
