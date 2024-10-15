@@ -1,4 +1,5 @@
 import asyncio
+
 import discord
 from discord.ext import commands
 import re
@@ -8,6 +9,12 @@ class TwitFix(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.status = True
+        self.url = "fxtwitter.com"
+        self.check = ["//twitter.com", "//x.com", "//nitter.net", "//www.twitter.com", "//www.x.com", "//www.nitter.net"]
+        self.replace = ["twitter.com", "x.com", "nitter.net"]
+        self.ignore = ["fxtwitter.com", "vxtwitter.com"]
+        self.emoji = "<:twitter_logo:1203668202324885554>"
+        self.id = "tfid"
         self.log = TwitLog()
         self.bot.loop.create_task(self.init_log())
 
@@ -21,57 +28,39 @@ class TwitFix(commands.Cog):
             return
 
         # Intuitive replies
-        if message.reference and message.reference.resolved:
-            parent = message.reference.resolved
-            if parent.author == self.bot.user:
-                parent_ref = await message.channel.fetch_message(parent.reference.message_id)
-                if parent.reference and parent_ref:
-                    parent_author = parent_ref.author
-                    if parent_author != message.author:
-                        if await self.log.get_ignored(parent_author.id) is not True:
-                            await parent_author.send(f"{message.author.display_name} replied to a fixed Tweet you posted in {message.guild.name}: "
-                                                     f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}\n"
-                                                     f"If you want to disable these reminders, use the command /tfremind.")
+        res = await self.is_intuitive_reply(message)
+        if not res:
+            pass
+        else:
+            await res.send(
+                f"{message.author.display_name} replied to your message that I fixed in {message.guild.name}: "
+                f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}\n"
+                f"If you want to disable these reminders, use the command /tfremind.")
 
-        # URL Replacements
-        replace = ["twitter.com", "x.com"]
-        ignore = ["fxtwitter.com", "vxtwitter.com"]
-
-        # Ignore if message contains pre-fixed URLs
-        for i in ignore:
-            if i in message.content:
+        if await self.find_tweet(message):
+            fixed, urls = await self.fix_message(message)
+            try:
+                await asyncio.sleep(0.4)
+                await message.edit(suppress=True)
+            except discord.Forbidden:
+                fixed = ":prohibited: I don't have permission to supress embeds in the message I am replying to, please give me the `Manage Messages` permission to avoid clutter.\n" + content
+            try:
+                new_msg = await message.reply(fixed, mention_author=False)
+                await new_msg.add_reaction("❌")
+            except discord.Forbidden:
                 return
-        # Check if URLs contain replacements before Regex searching
-        count = 0
-        for r in replace:
-            if r in message.content:
-                new_content = ""
-                url_regex = r"(https?:\/\/)(www\.)?(twitter\.com|x\.com)(\/[-a-zA-Z0-9()@:%_\+.~#?&=]*)(\/status\/[-a-zA-Z0-9()@:%_\+.~#?&=]*)(\/photo\/[0-9]*)?"
-                urls = re.findall(url_regex, message.content)
-                log_count = 0
-                for url in urls:
-                    spoiler = await spoiler_check(message.content)
-                    url = url[0] + url[1] + url[2] + url[3] + url[4]
-                    for r in replace:
-                        if r in url and "fxtwitter.com" not in url and "vxtwitter.com" not in url:
-                            url = url.replace(r, "fxtwitter.com")
-                            if spoiler:
-                                url = "||" + url + "||"
-                            new_content += f"{url}\n"
-                            log_count += 1
-
-                if len(urls) > 0:
-                    await self.log.update(message.guild.id, message.author.id, log_count, )
-                    prefix = f"Fixing Tweet for {message.author.display_name}\n"
-                    if spoiler:
-                        prefix = f"Fixing Tweet for {message.author.display_name} with hidden content\n"
-                    new_content = prefix + new_content
-                    await message.reply(new_content, mention_author=False)
-                    return
+    @commands.Cog.listener()
+    async def on_reaction_add(self, reaction, user):
+        if user.bot:
+            return
+        # If replied to message is by the reaction user, and if the reaction emoji is for deleting
+        if reaction.message.reference.resolved.author.id == user.id and reaction.emoji == "❌":
+            await reaction.message.delete()
+            await user.send(f"You deleted a tweet I fixed in {reaction.message.guild.name}.")
 
     @commands.is_owner()
-    @commands.hybrid_command(name="twitstatus", with_app_command=True, description="Toggle Twitter link fixer.")
-    async def twitstatus(self, ctx):
+    @commands.hybrid_command(name="tftoggle", with_app_command=True, description="Toggle Twitter link fixer.")
+    async def tftoggle(self, ctx):
         if self.status:
             self.status = False
             await ctx.send("Twitter link fixer disabled.")
@@ -115,6 +104,69 @@ class TwitFix(commands.Cog):
         else:
             await self.log.rem_ignored(ctx.author.id)
             await ctx.author.send("You will now receive reply reminders.")
+
+    async def is_intuitive_reply(self, message):
+        if message.author.bot:
+            return False
+        # Check if the replied to message is context message
+        if message.reference and message.reference.resolved:
+            search = message.reference.resolved
+            # If it's not a bot message, return False
+            if not search.author.bot:
+                return False
+            # If the replied to message is not replying to another message, return False
+            if not search.reference:
+                return False
+            # Check if the bot message fixed a twitter link
+            is_fixed = search.content.find("fxtwitter.com")
+            # Handle bot not being able to load resolved reference, force load message that we know exists
+            target = await search.channel.fetch_message(search.reference.message_id)
+            if target and is_fixed != -1:
+                user = await self.bot.fetch_user(int(target.author.id))
+                # Check if the user has disabled reminders, and if the user is not replying to their own fixed tweet
+                if not await self.log.get_ignored(user.id) and user.id != message.author.id:
+                    return user
+        return False
+
+    async def find_tweet(self, message):
+        # URL Replacements
+        # Ignore if message contains pre-fixed URLs
+        for i in self.ignore:
+            if i in message.content:
+                return False
+        # Check if URLs contain replacements before Regex searching
+        count = 0
+        for r in self.check:
+            if r in message.content and "status" in message.content:
+                return True
+        return False
+
+    async def fix_message(self, message):
+        regex = r"(https?:\/\/)((?:www.)?twitter\.com|x\.com|nitter\.net)(\/[-a-zA-Z0-9()@:%_\+.~#?&=]*)(\/status\/[-a-zA-Z0-9()@:%_\+.~#?&=]*)(\/photo\/[0-9]*)?"
+        new_content = ""
+        urls = re.findall(regex, message.content)
+        new_urls = []
+        log_count = 0
+        for url in urls:
+            spoiler = await spoiler_check(message.content)
+            new_url = url[0] + url[1] + url[2] + url[3] + url[4]
+            url = ''.join(url)
+            for r in self.replace:
+                if r in new_url and "fxtwitter.com" not in url and "vxtwitter.com" not in url:
+                    new_url = new_url.replace(r, "fxtwitter.com")
+                    new_url = new_url.replace("www.", "")
+                    if spoiler:
+                        new_url = "||" + new_url + "||"
+                    log_count += 1
+                    new_content += f"{new_url}\n"
+                    new_urls.append(new_url)
+
+        if len(urls) > 0:
+            await self.log.update(message.guild.id, message.author.id, log_count)
+            return new_content, new_urls
+        # This is disgusting but it cracks me up
+        return False, False
+
 async def spoiler_check(message):
     split = message.split("||")
     if len(split) >= 2:

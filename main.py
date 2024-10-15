@@ -35,7 +35,7 @@ class Galassist(commands.Bot):
     async def on_ready(self):
         print("Bot initialised.")
         await self.startup()
-        await self.change_presence(activity=discord.Game(name=f":)"))
+        await self.change_presence(activity=discord.Game(name=f"Fixing embeds..."))
 
     async def startup(self):
         print("Attempting to load cogs...")
