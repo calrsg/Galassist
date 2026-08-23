@@ -10,7 +10,7 @@ class InstagramLink(LinkInterface):
 
     @property
     def link(self) -> str:
-        return "d.vxinstagram.com"
+        return "oginstagram.com"
     
     @property
     def status(self) -> str:
@@ -18,7 +18,7 @@ class InstagramLink(LinkInterface):
 
     @property
     def ignore(self) -> List[str]:
-        return  ["ddinstagram.com", "zzinstagram.com", "d.vxinstagram.com"]
+        return  ["ddinstagram.com", "zzinstagram.com", "d.vxinstagram.com", "oginstagram.com"]
 
     @property
     def replace(self) -> List[str]:

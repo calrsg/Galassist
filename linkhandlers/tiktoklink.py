@@ -10,19 +10,20 @@ class TiktokLink(LinkInterface):
 
     @property
     def link(self) -> str:
-        return "tiktokez.com"
+        return "kktiktok.com"
 
     @property
     def ignore(self) -> List[str]:
-        return  ["tiktokez.com", "tnktok.com"]
+        return  ["tiktokez.com", "tnktok.com", "kktiktok.com"]
 
     @property
     def replace(self) -> List[str]:
         """Return links to replace."""
-        return ["vt.tiktok.com", "www.tiktok.com"]
+        return ["tiktok.com"]
     
     @property
     def pattern(self) -> str:
         """Return the regex pattern for the Tiktok link.
-        Matches Tiktok links with reel and post components."""
-        return r"(https?:\/\/)((?:vt|www)\.tiktok\.com\/)([-a-zA-Z0-9()@:%_\+.~#&=\/]*\/)"
+        Matches vt.tiktok.com short links and the full www.tiktok.com paths the
+        desktop site shares, which carry a query string and no trailing slash."""
+        return r"(https?:\/\/)((?:vt|www)\.tiktok\.com)(\/[-a-zA-Z0-9()@:%_\+.~#?&=\/]*)"
